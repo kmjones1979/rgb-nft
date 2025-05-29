@@ -28,7 +28,7 @@ const deployYourContract: DeployFunction = async function (hre: HardhatRuntimeEn
   const yourContract = await hre.ethers.getContract<Contract>("YourContract", deployer);
   console.log("🎨 Grid NFT contract deployed!");
   console.log("📊 Max supply:", await yourContract.MAX_SUPPLY());
-  console.log("💰 Mint price:", await yourContract.MINT_PRICE());
+  console.log("🆓 Mint price: FREE!");
 };
 
 export default deployYourContract;

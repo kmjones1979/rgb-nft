@@ -12,6 +12,7 @@ import "@openzeppelin/contracts/utils/Strings.sol";
 /**
  * A smart contract that represents a 16x16 grid as NFTs
  * Each box in the grid can be minted as an individual NFT (token IDs 1-256)
+ * Users can customize RGB colors for their NFTs
  * @author BuidlGuidl
  */
 contract YourContract is ERC721, Ownable {
@@ -20,14 +21,23 @@ contract YourContract is ERC721, Ownable {
     // Constants
     uint256 public constant GRID_SIZE = 16;
     uint256 public constant MAX_SUPPLY = 256; // 16 * 16
-    uint256 public constant MINT_PRICE = 0.01 ether;
+    uint256 public constant COLOR_STEP = 17; // Steps of 17 for 0-255 (15 steps: 0, 17, 34, 51, 68, 85, 102, 119, 136, 153, 170, 187, 204, 221, 238, 255)
+
+    // Struct to store RGB color
+    struct RGBColor {
+        uint8 r;
+        uint8 g;
+        uint8 b;
+    }
 
     // State Variables
     uint256 public totalSupply = 0;
     mapping(uint256 => bool) public mintedTokens;
+    mapping(uint256 => RGBColor) public tokenColors;
     
     // Events
     event GridBoxMinted(address indexed minter, uint256 indexed tokenId, uint256 x, uint256 y);
+    event ColorUpdated(address indexed owner, uint256 indexed tokenId, uint8 r, uint8 g, uint8 b);
 
     // Constructor
     constructor(address _owner) ERC721("GridNFT", "GRID") Ownable(_owner) {
@@ -35,13 +45,12 @@ contract YourContract is ERC721, Ownable {
     }
 
     /**
-     * Function to mint a specific grid box as an NFT
+     * Function to mint a specific grid box as an NFT (now free!)
      * @param tokenId The token ID to mint (1-256)
      */
-    function mintGridBox(uint256 tokenId) public payable {
+    function mintGridBox(uint256 tokenId) public {
         require(tokenId >= 1 && tokenId <= MAX_SUPPLY, "Invalid token ID");
         require(!mintedTokens[tokenId], "Token already minted");
-        require(msg.value >= MINT_PRICE, "Insufficient payment");
 
         mintedTokens[tokenId] = true;
         totalSupply++;
@@ -52,9 +61,89 @@ contract YourContract is ERC721, Ownable {
 
         _mint(msg.sender, tokenId);
         
+        // Initialize with default color (white)
+        tokenColors[tokenId] = RGBColor(255, 255, 255);
+        
         emit GridBoxMinted(msg.sender, tokenId, x, y);
         
         console.log("Grid box minted: tokenId %s, coordinates (%s, %s)", tokenId, x, y);
+    }
+
+    /**
+     * Function to update the color of an NFT (only by owner)
+     * @param tokenId The token ID to update
+     * @param r Red value (0-255)
+     * @param g Green value (0-255)
+     * @param b Blue value (0-255)
+     */
+    function updateColor(uint256 tokenId, uint8 r, uint8 g, uint8 b) public {
+        require(_ownerOf(tokenId) == msg.sender, "Not the owner of this token");
+        require(mintedTokens[tokenId], "Token does not exist");
+        
+        tokenColors[tokenId] = RGBColor(r, g, b);
+        
+        emit ColorUpdated(msg.sender, tokenId, r, g, b);
+    }
+
+    /**
+     * Function to update color using steps (easier UX)
+     * @param tokenId The token ID to update
+     * @param rStep Red step (0-15, maps to 0-255)
+     * @param gStep Green step (0-15, maps to 0-255)
+     * @param bStep Blue step (0-15, maps to 0-255)
+     */
+    function updateColorBySteps(uint256 tokenId, uint8 rStep, uint8 gStep, uint8 bStep) public {
+        require(_ownerOf(tokenId) == msg.sender, "Not the owner of this token");
+        require(mintedTokens[tokenId], "Token does not exist");
+        require(rStep <= 15 && gStep <= 15 && bStep <= 15, "Steps must be 0-15");
+        
+        uint8 r = rStep == 15 ? 255 : uint8(rStep * COLOR_STEP);
+        uint8 g = gStep == 15 ? 255 : uint8(gStep * COLOR_STEP);
+        uint8 b = bStep == 15 ? 255 : uint8(bStep * COLOR_STEP);
+        
+        tokenColors[tokenId] = RGBColor(r, g, b);
+        
+        emit ColorUpdated(msg.sender, tokenId, r, g, b);
+    }
+
+    /**
+     * Function to get the color of a token
+     * @param tokenId The token ID
+     * @return r Red value (0-255)
+     * @return g Green value (0-255)
+     * @return b Blue value (0-255)
+     */
+    function getTokenColor(uint256 tokenId) public view returns (uint8 r, uint8 g, uint8 b) {
+        require(mintedTokens[tokenId], "Token does not exist");
+        RGBColor memory color = tokenColors[tokenId];
+        return (color.r, color.g, color.b);
+    }
+
+    /**
+     * Function to get color as a hex string
+     * @param tokenId The token ID
+     * @return hex color string (e.g., "#FF5733")
+     */
+    function getTokenColorHex(uint256 tokenId) public view returns (string memory) {
+        require(mintedTokens[tokenId], "Token does not exist");
+        RGBColor memory color = tokenColors[tokenId];
+        
+        return string(abi.encodePacked(
+            "#",
+            toHexString(color.r),
+            toHexString(color.g),
+            toHexString(color.b)
+        ));
+    }
+
+    /**
+     * Helper function to convert uint8 to hex string
+     */
+    function toHexString(uint8 value) internal pure returns (string memory) {
+        bytes memory buffer = new bytes(2);
+        buffer[0] = bytes1(uint8(48 + uint256(value / 16) + (value / 16 > 9 ? 7 : 0)));
+        buffer[1] = bytes1(uint8(48 + uint256(value % 16) + (value % 16 > 9 ? 7 : 0)));
+        return string(buffer);
     }
 
     /**
@@ -120,64 +209,28 @@ contract YourContract is ERC721, Ownable {
     }
 
     /**
-     * Override tokenURI to provide metadata
+     * Override tokenURI to provide metadata including color
      */
     function tokenURI(uint256 tokenId) public view override returns (string memory) {
         require(_ownerOf(tokenId) != address(0), "Token does not exist");
         
         (uint256 x, uint256 y) = getCoordinates(tokenId);
+        RGBColor memory color = tokenColors[tokenId];
+        string memory colorHex = getTokenColorHex(tokenId);
         
+        // Return simple JSON without base64 encoding to avoid stack overflow
         return string(abi.encodePacked(
-            "data:application/json;base64,",
-            base64encode(bytes(string(abi.encodePacked(
-                '{"name": "Grid Box #', tokenId.toString(), 
-                '", "description": "A collectible grid box NFT at coordinates (', x.toString(), ', ', y.toString(), ')",',
-                '"attributes": [{"trait_type": "X Coordinate", "value": ', x.toString(), '},',
-                '{"trait_type": "Y Coordinate", "value": ', y.toString(), '}]}'
-            ))))
+            '{"name": "Grid Box #', tokenId.toString(),
+            '", "description": "A collectible grid box NFT at coordinates (', x.toString(), ', ', y.toString(), ') with custom RGB color",',
+            '"attributes": [',
+            '{"trait_type": "X Coordinate", "value": ', x.toString(), '},',
+            '{"trait_type": "Y Coordinate", "value": ', y.toString(), '},',
+            '{"trait_type": "Color Hex", "value": "', colorHex, '"},',
+            '{"trait_type": "Red", "value": ', uint256(color.r).toString(), '},',
+            '{"trait_type": "Green", "value": ', uint256(color.g).toString(), '},',
+            '{"trait_type": "Blue", "value": ', uint256(color.b).toString(), '}',
+            ']}'
         ));
-    }
-
-    /**
-     * Base64 encoding function
-     */
-    function base64encode(bytes memory data) internal pure returns (string memory) {
-        if (data.length == 0) return "";
-        
-        string memory table = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-        
-        uint256 encodedLen = 4 * ((data.length + 2) / 3);
-        string memory result = new string(encodedLen + 32);
-        
-        assembly {
-            let tablePtr := add(table, 1)
-            let dataPtr := data
-            let endPtr := add(dataPtr, mload(data))
-            let resultPtr := add(result, 32)
-            
-            for {} lt(dataPtr, endPtr) {}
-            {
-                dataPtr := add(dataPtr, 3)
-                let input := mload(dataPtr)
-                
-                mstore8(resultPtr, mload(add(tablePtr, and(shr(18, input), 0x3F))))
-                resultPtr := add(resultPtr, 1)
-                mstore8(resultPtr, mload(add(tablePtr, and(shr(12, input), 0x3F))))
-                resultPtr := add(resultPtr, 1)
-                mstore8(resultPtr, mload(add(tablePtr, and(shr( 6, input), 0x3F))))
-                resultPtr := add(resultPtr, 1)
-                mstore8(resultPtr, mload(add(tablePtr, and(        input,  0x3F))))
-                resultPtr := add(resultPtr, 1)
-            }
-            
-            switch mod(mload(data), 3)
-            case 1 { mstore(sub(resultPtr, 2), shl(240, 0x3d3d)) }
-            case 2 { mstore(sub(resultPtr, 1), shl(248, 0x3d)) }
-            
-            mstore(result, encodedLen)
-        }
-        
-        return result;
     }
 
     /**

@@ -3,28 +3,32 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { NextPage } from "next";
-import { parseEther } from "viem";
 import { useAccount } from "wagmi";
 import { BugAntIcon, MagnifyingGlassIcon } from "@heroicons/react/24/outline";
 import { Address } from "~~/components/scaffold-eth";
 import { useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
 import { notification } from "~~/utils/scaffold-eth";
 
+interface TokenColor {
+  r: number;
+  g: number;
+  b: number;
+}
+
 const Home: NextPage = () => {
   const { address: connectedAddress } = useAccount();
   const [mintedTokens, setMintedTokens] = useState<Set<number>>(new Set());
+  const [tokenColors, setTokenColors] = useState<Map<number, TokenColor>>(new Map());
   const [hoveredToken, setHoveredToken] = useState<number | null>(null);
   const [isMinting, setIsMinting] = useState<number | null>(null);
+  const [selectedToken, setSelectedToken] = useState<number | null>(null);
+  const [colorSteps, setColorSteps] = useState({ r: 15, g: 15, b: 15 }); // Start with white
+  const [isUpdatingColor, setIsUpdatingColor] = useState(false);
 
   // Read contract data
   const { data: totalSupply } = useScaffoldReadContract({
     contractName: "YourContract",
     functionName: "totalSupply",
-  });
-
-  const { data: mintPrice } = useScaffoldReadContract({
-    contractName: "YourContract",
-    functionName: "MINT_PRICE",
   });
 
   const { data: allMintedTokens } = useScaffoldReadContract({
@@ -37,11 +41,19 @@ const Home: NextPage = () => {
     contractName: "YourContract",
   });
 
-  // Update minted tokens when data changes
+  // Update minted tokens and fetch their colors
   useEffect(() => {
     if (allMintedTokens) {
       const tokenSet = new Set(allMintedTokens.map(token => Number(token)));
       setMintedTokens(tokenSet);
+
+      // For now, set default white color for all minted tokens
+      // In a real implementation, you'd fetch colors from events or additional reads
+      const colorMap = new Map<number, TokenColor>();
+      tokenSet.forEach(tokenId => {
+        colorMap.set(tokenId, { r: 255, g: 255, b: 255 });
+      });
+      setTokenColors(colorMap);
     }
   }, [allMintedTokens]);
 
@@ -61,18 +73,46 @@ const Home: NextPage = () => {
       await writeYourContractAsync({
         functionName: "mintGridBox",
         args: [BigInt(tokenId)],
-        value: mintPrice || parseEther("0.01"),
       });
 
-      notification.success(`Successfully minted grid box #${tokenId}!`);
+      notification.success(`Successfully minted grid box #${tokenId} for FREE! 🎉`);
 
       // Update local state immediately for better UX
       setMintedTokens(prev => new Set([...prev, tokenId]));
+      // Set default white color for newly minted token
+      setTokenColors(prev => new Map([...prev, [tokenId, { r: 255, g: 255, b: 255 }]]));
     } catch (error) {
       console.error("Error minting NFT:", error);
       notification.error("Failed to mint grid box");
     } finally {
       setIsMinting(null);
+    }
+  };
+
+  const handleUpdateColor = async () => {
+    if (!selectedToken || !connectedAddress) return;
+
+    try {
+      setIsUpdatingColor(true);
+      await writeYourContractAsync({
+        functionName: "updateColorBySteps",
+        args: [BigInt(selectedToken), colorSteps.r, colorSteps.g, colorSteps.b],
+      });
+
+      notification.success(`Color updated for token #${selectedToken}! 🎨`);
+
+      // Update local state
+      const newColor = {
+        r: colorSteps.r === 15 ? 255 : colorSteps.r * 17,
+        g: colorSteps.g === 15 ? 255 : colorSteps.g * 17,
+        b: colorSteps.b === 15 ? 255 : colorSteps.b * 17,
+      };
+      setTokenColors(prev => new Map([...prev, [selectedToken, newColor]]));
+    } catch (error) {
+      console.error("Error updating color:", error);
+      notification.error("Failed to update color");
+    } finally {
+      setIsUpdatingColor(false);
     }
   };
 
@@ -86,6 +126,16 @@ const Home: NextPage = () => {
     return { x, y };
   };
 
+  const getRgbString = (color: TokenColor): string => {
+    return `rgb(${color.r}, ${color.g}, ${color.b})`;
+  };
+
+  const isOwnedByUser = (tokenId: number): boolean => {
+    // In a real app, you'd check ownership from the contract
+    // For now, assume all minted tokens are owned by current user if connected
+    return mintedTokens.has(tokenId) && !!connectedAddress;
+  };
+
   const renderGrid = () => {
     const grid = [];
     for (let row = 0; row < 16; row++) {
@@ -95,25 +145,53 @@ const Home: NextPage = () => {
         const isMinted = mintedTokens.has(tokenId);
         const isHovered = hoveredToken === tokenId;
         const isCurrentlyMinting = isMinting === tokenId;
+        const isSelected = selectedToken === tokenId;
+        const tokenColor = tokenColors.get(tokenId);
+        const isOwned = isOwnedByUser(tokenId);
+
+        let backgroundColor = "bg-gray-100";
+        let textColor = "text-gray-800";
+
+        if (isMinted && tokenColor) {
+          backgroundColor = getRgbString(tokenColor);
+          // Determine text color based on brightness
+          const brightness = (tokenColor.r * 299 + tokenColor.g * 587 + tokenColor.b * 114) / 1000;
+          textColor = brightness > 128 ? "text-black" : "text-white";
+        } else if (isMinted) {
+          backgroundColor = "bg-white";
+        } else if (isHovered) {
+          backgroundColor = "bg-blue-200 border-blue-400";
+        }
 
         rowBoxes.push(
           <div
             key={tokenId}
             className={`
-              w-8 h-8 border border-gray-300 cursor-pointer transition-all duration-200 flex items-center justify-center text-xs font-bold
-              ${
-                isMinted
-                  ? "bg-green-500 text-white"
-                  : isHovered
-                    ? "bg-blue-200 border-blue-400"
-                    : "bg-gray-100 hover:bg-blue-100"
-              }
+              w-8 h-8 border-2 cursor-pointer transition-all duration-200 flex items-center justify-center text-xs font-bold
+              ${isSelected ? "border-yellow-500 border-4" : "border-gray-300"}
               ${isCurrentlyMinting ? "animate-pulse bg-yellow-300" : ""}
+              ${!isMinted ? "hover:bg-blue-100" : ""}
+              ${textColor}
             `}
-            onClick={() => !isMinted && !isCurrentlyMinting && handleMintBox(tokenId)}
+            style={{ backgroundColor: isMinted && tokenColor ? getRgbString(tokenColor) : undefined }}
+            onClick={() => {
+              if (!isMinted && !isCurrentlyMinting) {
+                handleMintBox(tokenId);
+              } else if (isMinted && isOwned) {
+                setSelectedToken(tokenId);
+                // Set current color steps based on token color
+                if (tokenColor) {
+                  setColorSteps({
+                    r: Math.round(tokenColor.r / 17),
+                    g: Math.round(tokenColor.g / 17),
+                    b: Math.round(tokenColor.b / 17),
+                  });
+                }
+              }
+            }}
             onMouseEnter={() => setHoveredToken(tokenId)}
             onMouseLeave={() => setHoveredToken(null)}
-            title={`Token ID: ${tokenId} | Coordinates: (${col}, ${row}) | ${isMinted ? "Minted" : "Available"}`}
+            title={`Token ID: ${tokenId} | Coordinates: (${col}, ${row}) | ${isMinted ? (isOwned ? "Owned - Click to customize" : "Minted") : "Available - Click to mint FREE"}`}
           >
             {isMinted ? "✓" : tokenId}
           </div>,
@@ -128,12 +206,97 @@ const Home: NextPage = () => {
     return grid;
   };
 
+  const renderColorPicker = () => {
+    if (!selectedToken) return null;
+
+    const previewColor = {
+      r: colorSteps.r === 15 ? 255 : colorSteps.r * 17,
+      g: colorSteps.g === 15 ? 255 : colorSteps.g * 17,
+      b: colorSteps.b === 15 ? 255 : colorSteps.b * 17,
+    };
+
+    return (
+      <div className="bg-white p-6 rounded-lg shadow-lg border mt-6 max-w-md mx-auto">
+        <h3 className="text-xl font-bold text-center mb-4">Customize Token #{selectedToken}</h3>
+
+        {/* Color Preview */}
+        <div className="flex justify-center mb-4">
+          <div
+            className="w-16 h-16 border-2 border-gray-300 rounded-lg flex items-center justify-center text-white font-bold"
+            style={{ backgroundColor: getRgbString(previewColor) }}
+          >
+            ✓
+          </div>
+        </div>
+
+        {/* RGB Sliders */}
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Red: {previewColor.r}</label>
+            <input
+              type="range"
+              min="0"
+              max="15"
+              value={colorSteps.r}
+              onChange={e => setColorSteps(prev => ({ ...prev, r: parseInt(e.target.value) }))}
+              className="w-full h-2 bg-red-200 rounded-lg appearance-none cursor-pointer"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Green: {previewColor.g}</label>
+            <input
+              type="range"
+              min="0"
+              max="15"
+              value={colorSteps.g}
+              onChange={e => setColorSteps(prev => ({ ...prev, g: parseInt(e.target.value) }))}
+              className="w-full h-2 bg-green-200 rounded-lg appearance-none cursor-pointer"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Blue: {previewColor.b}</label>
+            <input
+              type="range"
+              min="0"
+              max="15"
+              value={colorSteps.b}
+              onChange={e => setColorSteps(prev => ({ ...prev, b: parseInt(e.target.value) }))}
+              className="w-full h-2 bg-blue-200 rounded-lg appearance-none cursor-pointer"
+            />
+          </div>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex space-x-3 mt-6">
+          <button
+            onClick={handleUpdateColor}
+            disabled={isUpdatingColor}
+            className={`flex-1 py-2 px-4 rounded-lg font-bold transition-colors ${
+              isUpdatingColor ? "bg-gray-400 cursor-not-allowed" : "bg-blue-500 hover:bg-blue-600"
+            } text-white`}
+          >
+            {isUpdatingColor ? "Updating..." : "Update Color"}
+          </button>
+
+          <button
+            onClick={() => setSelectedToken(null)}
+            className="flex-1 py-2 px-4 border border-gray-300 rounded-lg font-bold hover:bg-gray-50 transition-colors"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="flex items-center flex-col flex-grow pt-10">
       <div className="px-5">
         <h1 className="text-center">
-          <span className="block text-4xl font-bold">Grid NFT Collection</span>
-          <span className="block text-2xl mb-2">Collect Your Pixel</span>
+          <span className="block text-4xl font-bold">Colorful Grid NFT Collection</span>
+          <span className="block text-2xl mb-2">Mint Free & Customize Colors</span>
         </h1>
         <div className="flex justify-center items-center space-x-2 flex-col sm:flex-row">
           <p className="my-2 font-medium">Connected Address:</p>
@@ -151,7 +314,7 @@ const Home: NextPage = () => {
             <div className="text-sm text-gray-600">Available</div>
           </div>
           <div className="text-center">
-            <div className="text-2xl font-bold">0.01 ETH</div>
+            <div className="text-2xl font-bold text-green-600">FREE</div>
             <div className="text-sm text-gray-600">Mint Price</div>
           </div>
         </div>
@@ -161,19 +324,23 @@ const Home: NextPage = () => {
           <h3 className="font-bold text-blue-800 mb-2">How to Play:</h3>
           <ul className="text-blue-700 text-sm space-y-1">
             <li>• Each box represents an NFT with a unique token ID (1-256)</li>
-            <li>• Green boxes (✓) are already minted</li>
-            <li>• Click any available box to mint it for 0.01 ETH</li>
-            <li>• Hover over boxes to see their token ID and coordinates</li>
+            <li>• Click any gray box to mint it for FREE! 🆓</li>
+            <li>• Click your owned colored boxes to customize their RGB colors</li>
+            <li>• Use the sliders to adjust Red, Green, and Blue values (16 steps each)</li>
+            <li>• Yellow border shows selected token for customization</li>
           </ul>
         </div>
 
         {/* Grid */}
         <div className="flex justify-center mb-6">
           <div className="bg-white p-6 rounded-lg shadow-lg border">
-            <h2 className="text-xl font-bold text-center mb-4">16x16 Grid (256 Total Boxes)</h2>
+            <h2 className="text-xl font-bold text-center mb-4">16x16 Colorful Grid (256 Total Boxes)</h2>
             <div className="grid gap-1">{renderGrid()}</div>
           </div>
         </div>
+
+        {/* Color Picker */}
+        {renderColorPicker()}
 
         {/* Hovered Token Info */}
         {hoveredToken && (
@@ -184,6 +351,12 @@ const Home: NextPage = () => {
                 Coordinates: ({getCoordinates(hoveredToken).x}, {getCoordinates(hoveredToken).y})
               </div>
               <div>Status: {mintedTokens.has(hoveredToken) ? "Minted ✓" : "Available"}</div>
+              {mintedTokens.has(hoveredToken) && tokenColors.get(hoveredToken) && (
+                <div>
+                  Color: RGB({tokenColors.get(hoveredToken)?.r}, {tokenColors.get(hoveredToken)?.g},{" "}
+                  {tokenColors.get(hoveredToken)?.b})
+                </div>
+              )}
             </div>
           </div>
         )}

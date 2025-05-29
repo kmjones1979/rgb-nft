@@ -7,7 +7,7 @@ import { GenericContractsDeclaration } from "~~/utils/scaffold-eth/contract";
 const deployedContracts = {
   31337: {
     YourContract: {
-      address: "0x5FC8d32690cc91D4c39d9d3abcBD16989F875707",
+      address: "0xA51c1fc2f0D1a1b8494Ed1FE312d7C3a78Ed91C0",
       abi: [
         {
           inputs: [
@@ -201,6 +201,43 @@ const deployedContracts = {
             {
               indexed: true,
               internalType: "address",
+              name: "owner",
+              type: "address",
+            },
+            {
+              indexed: true,
+              internalType: "uint256",
+              name: "tokenId",
+              type: "uint256",
+            },
+            {
+              indexed: false,
+              internalType: "uint8",
+              name: "r",
+              type: "uint8",
+            },
+            {
+              indexed: false,
+              internalType: "uint8",
+              name: "g",
+              type: "uint8",
+            },
+            {
+              indexed: false,
+              internalType: "uint8",
+              name: "b",
+              type: "uint8",
+            },
+          ],
+          name: "ColorUpdated",
+          type: "event",
+        },
+        {
+          anonymous: false,
+          inputs: [
+            {
+              indexed: true,
+              internalType: "address",
               name: "minter",
               type: "address",
             },
@@ -272,6 +309,19 @@ const deployedContracts = {
         },
         {
           inputs: [],
+          name: "COLOR_STEP",
+          outputs: [
+            {
+              internalType: "uint256",
+              name: "",
+              type: "uint256",
+            },
+          ],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [],
           name: "GRID_SIZE",
           outputs: [
             {
@@ -286,19 +336,6 @@ const deployedContracts = {
         {
           inputs: [],
           name: "MAX_SUPPLY",
-          outputs: [
-            {
-              internalType: "uint256",
-              name: "",
-              type: "uint256",
-            },
-          ],
-          stateMutability: "view",
-          type: "function",
-        },
-        {
-          inputs: [],
-          name: "MINT_PRICE",
           outputs: [
             {
               internalType: "uint256",
@@ -406,6 +443,54 @@ const deployedContracts = {
           inputs: [
             {
               internalType: "uint256",
+              name: "tokenId",
+              type: "uint256",
+            },
+          ],
+          name: "getTokenColor",
+          outputs: [
+            {
+              internalType: "uint8",
+              name: "r",
+              type: "uint8",
+            },
+            {
+              internalType: "uint8",
+              name: "g",
+              type: "uint8",
+            },
+            {
+              internalType: "uint8",
+              name: "b",
+              type: "uint8",
+            },
+          ],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [
+            {
+              internalType: "uint256",
+              name: "tokenId",
+              type: "uint256",
+            },
+          ],
+          name: "getTokenColorHex",
+          outputs: [
+            {
+              internalType: "string",
+              name: "",
+              type: "string",
+            },
+          ],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [
+            {
+              internalType: "uint256",
               name: "x",
               type: "uint256",
             },
@@ -479,7 +564,7 @@ const deployedContracts = {
           ],
           name: "mintGridBox",
           outputs: [],
-          stateMutability: "payable",
+          stateMutability: "nonpayable",
           type: "function",
         },
         {
@@ -658,6 +743,35 @@ const deployedContracts = {
           inputs: [
             {
               internalType: "uint256",
+              name: "",
+              type: "uint256",
+            },
+          ],
+          name: "tokenColors",
+          outputs: [
+            {
+              internalType: "uint8",
+              name: "r",
+              type: "uint8",
+            },
+            {
+              internalType: "uint8",
+              name: "g",
+              type: "uint8",
+            },
+            {
+              internalType: "uint8",
+              name: "b",
+              type: "uint8",
+            },
+          ],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [
+            {
+              internalType: "uint256",
               name: "tokenId",
               type: "uint256",
             },
@@ -718,6 +832,62 @@ const deployedContracts = {
             },
           ],
           name: "transferOwnership",
+          outputs: [],
+          stateMutability: "nonpayable",
+          type: "function",
+        },
+        {
+          inputs: [
+            {
+              internalType: "uint256",
+              name: "tokenId",
+              type: "uint256",
+            },
+            {
+              internalType: "uint8",
+              name: "r",
+              type: "uint8",
+            },
+            {
+              internalType: "uint8",
+              name: "g",
+              type: "uint8",
+            },
+            {
+              internalType: "uint8",
+              name: "b",
+              type: "uint8",
+            },
+          ],
+          name: "updateColor",
+          outputs: [],
+          stateMutability: "nonpayable",
+          type: "function",
+        },
+        {
+          inputs: [
+            {
+              internalType: "uint256",
+              name: "tokenId",
+              type: "uint256",
+            },
+            {
+              internalType: "uint8",
+              name: "rStep",
+              type: "uint8",
+            },
+            {
+              internalType: "uint8",
+              name: "gStep",
+              type: "uint8",
+            },
+            {
+              internalType: "uint8",
+              name: "bStep",
+              type: "uint8",
+            },
+          ],
+          name: "updateColorBySteps",
           outputs: [],
           stateMutability: "nonpayable",
           type: "function",
