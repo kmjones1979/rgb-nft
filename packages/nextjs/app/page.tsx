@@ -15,6 +15,34 @@ interface TokenColor {
   b: number;
 }
 
+// Component to read a single token's color
+const TokenColorReader = ({
+  tokenId,
+  onColorRead,
+}: {
+  tokenId: number;
+  onColorRead: (tokenId: number, color: TokenColor) => void;
+}) => {
+  const { data: colorData } = useScaffoldReadContract({
+    contractName: "YourContract",
+    functionName: "getTokenColor",
+    args: [BigInt(tokenId)],
+  });
+
+  useEffect(() => {
+    if (colorData && Array.isArray(colorData) && colorData.length >= 3) {
+      const color = {
+        r: Number(colorData[0]),
+        g: Number(colorData[1]),
+        b: Number(colorData[2]),
+      };
+      onColorRead(tokenId, color);
+    }
+  }, [colorData, tokenId, onColorRead]);
+
+  return null; // This component doesn't render anything
+};
+
 const Home: NextPage = () => {
   const { address: connectedAddress } = useAccount();
   const [mintedTokens, setMintedTokens] = useState<Set<number>>(new Set());
@@ -41,21 +69,42 @@ const Home: NextPage = () => {
     contractName: "YourContract",
   });
 
-  // Update minted tokens and fetch their colors
+  // Callback to update token colors when read from contract
+  const handleColorRead = (tokenId: number, color: TokenColor) => {
+    setTokenColors(prev => new Map([...prev, [tokenId, color]]));
+  };
+
+  // Update minted tokens and set default colors
   useEffect(() => {
-    if (allMintedTokens) {
+    if (allMintedTokens && allMintedTokens.length > 0) {
       const tokenSet = new Set(allMintedTokens.map(token => Number(token)));
       setMintedTokens(tokenSet);
 
-      // For now, set default white color for all minted tokens
-      // In a real implementation, you'd fetch colors from events or additional reads
-      const colorMap = new Map<number, TokenColor>();
-      tokenSet.forEach(tokenId => {
-        colorMap.set(tokenId, { r: 255, g: 255, b: 255 });
+      // Set default white color for newly discovered tokens
+      setTokenColors(prevColors => {
+        const newColors = new Map(prevColors);
+        tokenSet.forEach(tokenId => {
+          if (!newColors.has(tokenId)) {
+            newColors.set(tokenId, { r: 255, g: 255, b: 255 });
+          }
+        });
+        return newColors;
       });
-      setTokenColors(colorMap);
     }
   }, [allMintedTokens]);
+
+  const fetchSingleTokenColor = async (tokenId: number) => {
+    try {
+      // For now, we'll simulate the color since the read hook has issues
+      // In a real implementation, you'd need to set up proper contract reading
+      const currentColor = tokenColors.get(tokenId);
+      if (!currentColor) {
+        setTokenColors(prev => new Map([...prev, [tokenId, { r: 255, g: 255, b: 255 }]]));
+      }
+    } catch (error) {
+      console.error(`Error fetching color for token ${tokenId}:`, error);
+    }
+  };
 
   const handleMintBox = async (tokenId: number) => {
     if (!connectedAddress) {
@@ -193,7 +242,19 @@ const Home: NextPage = () => {
             onMouseLeave={() => setHoveredToken(null)}
             title={`Token ID: ${tokenId} | Coordinates: (${col}, ${row}) | ${isMinted ? (isOwned ? "Owned - Click to customize" : "Minted") : "Available - Click to mint FREE"}`}
           >
-            {isMinted ? "✓" : tokenId}
+            {isMinted ? (
+              tokenColor && (tokenColor.r !== 255 || tokenColor.g !== 255 || tokenColor.b !== 255) ? (
+                <div className="flex flex-col items-center leading-none">
+                  <div className="text-[6px]">{tokenColor.r}</div>
+                  <div className="text-[6px]">{tokenColor.g}</div>
+                  <div className="text-[6px]">{tokenColor.b}</div>
+                </div>
+              ) : (
+                "✓"
+              )
+            ) : (
+              tokenId
+            )}
           </div>,
         );
       }
@@ -293,6 +354,11 @@ const Home: NextPage = () => {
 
   return (
     <div className="flex items-center flex-col flex-grow pt-10">
+      {/* Color readers for minted tokens */}
+      {Array.from(mintedTokens).map(tokenId => (
+        <TokenColorReader key={tokenId} tokenId={tokenId} onColorRead={handleColorRead} />
+      ))}
+
       <div className="px-5">
         <h1 className="text-center">
           <span className="block text-4xl font-bold">Colorful Grid NFT Collection</span>
